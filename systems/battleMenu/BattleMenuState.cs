@@ -4,5 +4,6 @@ public enum BattleMenuState
 	ActionMenu = 1,
 	TargetSelection = 2,
 	ItemMenu = 3,
-	SkillMenu = 4
+	SkillMenu = 4,
+	WeaponMenu = 5
 }

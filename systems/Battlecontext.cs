@@ -34,6 +34,7 @@ public partial class BattleContext
 	public ICombatant ActiveActor { get; internal set; }
 	public ICombatant SelectedTarget { get; set; }
 	public ICombatCommand PendingAction { get; internal set; }
+	public ICombatCommand CommandToResolve { get; internal set; }
 	public BattleMenuState CurrentMenuState => menuStateStack.Count == 0 ? BattleMenuState.None : menuStateStack.Peek();
 	public bool CanPopMenuState => menuStateStack.Count > 1;
 
@@ -134,6 +135,7 @@ public partial class BattleContext
 		NotifyRosterChanged();
 		CommandManager.ClearHistory();
 		PendingAction = null;
+		CommandToResolve = null;
 		InitializeMenuState(BattleMenuState.ActionMenu);
 	}
 
@@ -152,6 +154,7 @@ public partial class BattleContext
 		ActiveActor = null;
 		SelectedTarget = null;
 		PendingAction = null;
+		CommandToResolve = null;
 		CommandManager.ClearHistory();
 		InitializeMenuState(BattleMenuState.ActionMenu);
 	}
@@ -359,5 +362,44 @@ public partial class BattleContext
 		};
 
 		GD.PrintErr($"BattleContext: Cannot add {GetCombatantLabel(combatant)} to {sideLabel} side; capacity reached.");
+	}
+
+	public bool HasLivingPlayers()
+	{
+		return playerCombatants.Any(combatant => combatant != null && combatant.IsAlive());
+	}
+
+	public bool HasLivingEnemies()
+	{
+		return mobCombatants.Any(combatant => combatant != null && combatant.IsAlive());
+	}
+
+	public BattleOutcome EvaluateBattleOutcome()
+	{
+		bool playersAlive = HasLivingPlayers();
+		bool enemiesAlive = HasLivingEnemies();
+
+		if (!playersAlive && !enemiesAlive)
+		{
+			return BattleOutcome.Draw;
+		}
+
+		if (!playersAlive)
+		{
+			return BattleOutcome.Defeat;
+		}
+
+		if (!enemiesAlive)
+		{
+			return BattleOutcome.Victory;
+		}
+
+		return BattleOutcome.Ongoing;
+	}
+
+	public bool TryGetBattleOutcome(out BattleOutcome outcome)
+	{
+		outcome = EvaluateBattleOutcome();
+		return outcome != BattleOutcome.Ongoing;
 	}
 }

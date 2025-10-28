@@ -15,8 +15,9 @@ public partial class Player : Node, ICombatant, ICommandSource
 
 	private List<ICombatCommand> commands;
 	private List<ICombatCommand> targetSelectionCommands;
+	private List<ICombatCommand> weaponSelectionCommands;
 
-	public Player(CombatantStats stats , string name)
+	public Player(CombatantStats stats, string name)
 	{
 		CombatantName = name;
 		if (stats != null)
@@ -24,6 +25,7 @@ public partial class Player : Node, ICombatant, ICommandSource
 			InitializeFromStats(stats);
 		}
 	}
+
 	public void SetBattleSide(BattleSide side)
 	{
 		Side = side;
@@ -31,23 +33,18 @@ public partial class Player : Node, ICombatant, ICommandSource
 
 	public override void _Ready()
 	{
-		if (commands == null)
-		{
-			commands = new List<ICombatCommand>();
-		}
-
-		if (targetSelectionCommands == null)
-		{
-			targetSelectionCommands = new List<ICombatCommand>();
-		}
+		commands ??= new List<ICombatCommand>();
+		targetSelectionCommands ??= new List<ICombatCommand>();
+		weaponSelectionCommands ??= new List<ICombatCommand>();
 
 		if (CombatantStats != null && commands.Count == 0)
 		{
-		InitializeFromStats(CombatantStats);
-	}
+			InitializeFromStats(CombatantStats);
+		}
 
-	EnsureDefaultCommands();
-	EnsureTargetSelectionCommands();
+		EnsureDefaultCommands();
+		EnsureTargetSelectionCommands();
+		EnsureWeaponSelectionCommands();
 	}
 
 	public void SetCombatantStats(CombatantStats stats)
@@ -89,6 +86,7 @@ public partial class Player : Node, ICombatant, ICommandSource
 		return context.CurrentMenuState switch
 		{
 			BattleMenuState.TargetSelection => targetSelectionCommands,
+			BattleMenuState.WeaponMenu => weaponSelectionCommands,
 			_ => commands
 		};
 	}
@@ -102,32 +100,35 @@ public partial class Player : Node, ICombatant, ICommandSource
 		Attack = stats.attack;
 		Luck = stats.luck;
 
-		if (commands == null)
-		{
-			commands = new List<ICombatCommand>();
-		}
-
-		if (targetSelectionCommands == null)
-		{
-			targetSelectionCommands = new List<ICombatCommand>();
-		}
+		commands ??= new List<ICombatCommand>();
+		targetSelectionCommands ??= new List<ICombatCommand>();
+		weaponSelectionCommands ??= new List<ICombatCommand>();
 
 		EnsureDefaultCommands();
 		EnsureTargetSelectionCommands();
+		EnsureWeaponSelectionCommands();
 	}
 
 	private void EnsureDefaultCommands()
 	{
-		commands.RemoveAll(command => command is AttackCommand);
-
 		if (!commands.Any(command => command is PrepareAttackCommand))
 		{
 			commands.Add(new PrepareAttackCommand());
 		}
 
-		if (!commands.Any(command => command.Id == "menu.items"))
+		if (!commands.Any(command => command is OpenMenuCommand open && open.TargetState == BattleMenuState.WeaponMenu))
+		{
+			commands.Add(new OpenMenuCommand("menu.weapons", "Weapons", BattleMenuState.WeaponMenu));
+		}
+
+		if (!commands.Any(command => command is OpenMenuCommand open && open.TargetState == BattleMenuState.ItemMenu))
 		{
 			commands.Add(new OpenMenuCommand("menu.items", "Items", BattleMenuState.ItemMenu));
+		}
+
+		if (!commands.Any(command => command is FleeCommand))
+		{
+			commands.Add(new FleeCommand());
 		}
 	}
 
@@ -136,6 +137,14 @@ public partial class Player : Node, ICombatant, ICommandSource
 		if (!targetSelectionCommands.Any(command => command is ConfirmPendingActionCommand))
 		{
 			targetSelectionCommands.Add(new ConfirmPendingActionCommand());
+		}
+	}
+
+	private void EnsureWeaponSelectionCommands()
+	{
+		if (!weaponSelectionCommands.Any(command => command is SelectWeaponCommand select && select.WeaponId == "weapon.basic"))
+		{
+			weaponSelectionCommands.Add(new SelectWeaponCommand("weapon.basic", "Basic Strike", 1.0f));
 		}
 	}
 }

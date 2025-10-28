@@ -10,6 +10,7 @@ public partial class StateMachine : Node
 		NONE,
 		FINISHED,
 		TURN_HANDLE,
+		BATTLE_END,
 	}
 
 	public abstract partial class State : RefCounted

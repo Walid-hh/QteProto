@@ -31,8 +31,9 @@ public class ConfirmPendingActionCommand : ICombatCommand
 
 		var pending = context.PendingAction;
 		context.PendingAction = null;
+		context.CommandToResolve = pending;
 		context.CommandManager.ClearHistory();
-		pending.Execute(context);
+		context.InitializeMenuState(BattleMenuState.ActionMenu);
 	}
 
 	public bool CanUndo(BattleContext context)

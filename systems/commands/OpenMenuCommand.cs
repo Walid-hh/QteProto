@@ -15,6 +15,7 @@ public class OpenMenuCommand : ICombatCommand
 	public string Id { get; }
 	public string DisplayName { get; }
 	public bool EndsTurn => false;
+	public BattleMenuState TargetState => targetState;
 
 	public bool CanExecute(BattleContext context)
 	{

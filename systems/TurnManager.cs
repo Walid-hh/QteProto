@@ -11,9 +11,10 @@ public partial class TurnManager : Node
 	private int currentTurnIndex;
 	private bool turnCycleActive;
 
-	public event Action<ICombatant, IReadOnlyList<ICombatCommand>> CommandsAvailable;
 	public event Action<ICombatant> TurnStarted;
 	public event Action<ICombatant> TurnEnded;
+
+	public bool IsTurnCycleActive => turnCycleActive;
 
 	public override void _Ready()
 	{
@@ -25,7 +26,6 @@ public partial class TurnManager : Node
 		if (battleContext != null)
 		{
 			battleContext.RosterChanged -= HandleBattleRosterChanged;
-			battleContext.MenuStateChanged -= HandleMenuStateChanged;
 		}
 
 		battleContext = context;
@@ -33,7 +33,6 @@ public partial class TurnManager : Node
 		if (battleContext != null)
 		{
 			battleContext.RosterChanged += HandleBattleRosterChanged;
-			battleContext.MenuStateChanged += HandleMenuStateChanged;
 			UpdateTurnOrder();
 		}
 		else
@@ -91,68 +90,50 @@ public partial class TurnManager : Node
 
 		turnCycleActive = true;
 		currentTurnIndex = 0;
-		StartCurrentTurn();
 	}
 
-	public void NextTurn()
+	public bool BeginTurn()
 	{
-		if (!turnCycleActive)
-		{
-			StartTurnCycle();
-			return;
-		}
-
-		EndCurrentTurn();
+		return StartCurrentTurn();
 	}
 
-	public void TurnStart()
+	public void AbortBattle()
 	{
-		if (!turnCycleActive)
+		if (battleContext != null)
 		{
-			StartTurnCycle();
-		}
-	}
-
-	public void ExecuteCommand(ICombatCommand command, ICombatant target)
-	{
-		if (command == null || battleContext == null)
-		{
-			return;
+			battleContext.ResetTurnState();
 		}
 
-		if (target != null)
-		{
-			battleContext.SelectedTarget = target;
-		}
-
-		bool executed = battleContext.CommandManager.ExecuteCommand(command, battleContext);
-		if (!executed)
-		{
-			GD.Print("TurnManager: Command execution failed or was invalid for the current context.");
-			return;
-		}
-
-		if (command.EndsTurn)
-		{
-			EndCurrentTurn();
-		}
+		turnCycleActive = false;
+		currentCombatant = null;
+		combatantTurnOrder.Clear();
 	}
 
 	public override void _Process(double delta)
 	{
 	}
 
-	private void StartCurrentTurn()
+	public void CompleteCurrentTurn()
+	{
+		if (!turnCycleActive)
+		{
+			return;
+		}
+
+		EndCurrentTurn();
+	}
+
+	private bool StartCurrentTurn()
 	{
 		if (!turnCycleActive || combatantTurnOrder.Count == 0)
 		{
-			return;
+			return false;
 		}
 
 		if (battleContext == null)
 		{
 			GD.PrintErr("TurnManager cannot start a turn without a BattleContext.");
-			return;
+			return false;
 		}
 
 		if (currentTurnIndex >= combatantTurnOrder.Count)
@@ -160,13 +141,18 @@ public partial class TurnManager : Node
 			currentTurnIndex = 0;
 		}
 
+		int attempts = combatantTurnOrder.Count;
 		currentCombatant = combatantTurnOrder[currentTurnIndex];
+
+		while (attempts-- > 0 && (currentCombatant == null || !currentCombatant.IsAlive()))
+		{
+			AdvanceTurnIndex();
+			currentCombatant = combatantTurnOrder[currentTurnIndex];
+		}
 
 		if (currentCombatant == null || !currentCombatant.IsAlive())
 		{
-			battleContext?.ResetTurnState();
-			EndCurrentTurn();
-			return;
+			return false;
 		}
 
 		TurnStarted?.Invoke(currentCombatant);
@@ -175,23 +161,23 @@ public partial class TurnManager : Node
 		{
 			GD.PrintErr("TurnManager requires an ActionResolver before starting turns.");
 			currentCombatant.TakeTurn();
-			EndCurrentTurn();
-			return;
+			return false;
 		}
 
 		battleContext.ActiveActor = currentCombatant;
 		battleContext.SelectedTarget = null;
 
-		if (currentCombatant is ICommandSource commandSource)
+		if (currentCombatant is ICommandSource)
 		{
-			var commands = commandSource.GetAvailableCommands(battleContext) ?? Array.Empty<ICombatCommand>();
-			CommandsAvailable?.Invoke(currentCombatant, commands);
+			// Command handling delegated to BattleCommandController.
 		}
 		else
 		{
 			currentCombatant.TakeTurn();
-			EndCurrentTurn();
+			return false;
 		}
+
+		return true;
 	}
 
 	private void EndCurrentTurn()
@@ -209,13 +195,22 @@ public partial class TurnManager : Node
 			return;
 		}
 
+		AdvanceTurnIndex();
+	}
+
+	private void AdvanceTurnIndex()
+	{
+		if (combatantTurnOrder.Count == 0)
+		{
+			currentTurnIndex = 0;
+			return;
+		}
+
 		currentTurnIndex++;
 		if (currentTurnIndex >= combatantTurnOrder.Count)
 		{
 			currentTurnIndex = 0;
 		}
-
-		StartCurrentTurn();
 	}
 
 	public void UpdateTurnOrder()
@@ -245,17 +240,4 @@ public partial class TurnManager : Node
 		currentCombatant = null;
 	}
 
-	private void HandleMenuStateChanged(BattleMenuState state)
-	{
-		if (battleContext == null || currentCombatant == null)
-		{
-			return;
-		}
-
-		if (currentCombatant is ICommandSource commandSource)
-		{
-			var commands = commandSource.GetAvailableCommands(battleContext) ?? Array.Empty<ICombatCommand>();
-			CommandsAvailable?.Invoke(currentCombatant, commands);
-		}
-	}
 }

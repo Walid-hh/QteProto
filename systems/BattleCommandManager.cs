@@ -1,12 +1,8 @@
-using System;
 using System.Collections.Generic;
 
 public class BattleCommandManager
 {
 	private readonly Stack<ICombatCommand> undoStack = new();
-
-	public event Action<ICombatCommand> CommandExecuted;
-	public event Action<ICombatCommand> CommandUndone;
 
 	public bool ExecuteCommand(ICombatCommand command, BattleContext context)
 	{
@@ -21,7 +17,6 @@ public class BattleCommandManager
 		}
 
 		command.Execute(context);
-		CommandExecuted?.Invoke(command);
 
 		if (command.CanUndo(context))
 		{
@@ -45,7 +40,6 @@ public class BattleCommandManager
 		}
 
 		command.Undo(context);
-		CommandUndone?.Invoke(command);
 		return true;
 	}
 
